@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Any
 import warnings
 import pytz
 
-from config.constants import MARKET_CONFIGS
+from config.constants import MARKET_CONFIGS, DATA_ORIGINS
 from utils.market_calendar import get_expected_trading_days, get_expected_trading_days_forex
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,8 @@ class DataQualityTracker:
             'imputed_records': 0,
             'real_captured': 0,
             'sources': defaultdict(int),
-            'methods': defaultdict(int)
+            'methods': defaultdict(int),
+            'origins': defaultdict(int)
         })
         
         self.monthly_tracking = defaultdict(lambda: defaultdict(lambda: {
@@ -57,6 +58,7 @@ class DataQualityTracker:
             'real_captured': 0,
             'sources': defaultdict(int),
             'methods': defaultdict(int),
+            'origins': defaultdict(int),
             'expected_bars': 0,
             'completeness': 0
         }))
@@ -84,7 +86,23 @@ class DataQualityTracker:
         source = record.get('source_timeframe', 'unknown')
         method = record.get('capture_method', 'unknown')
         quality = record.get('quality_score', 1.0)
+        data_origin = record.get('data_origin')
         
+        # Actualizar origenes si están disponibles
+        if data_origin:
+            self.yearly_tracking[timestamp.year]['origins'][data_origin] += 1
+            self.monthly_tracking[timestamp.year][timestamp.month]['origins'][data_origin] += 1
+
+            if data_origin == 'M5_NATIVO':
+                source = 'M5'
+            elif data_origin == 'M5_AGREGADO_M1':
+                source = 'M1'
+            elif data_origin.startswith('M5_AGREGADO_'):
+                source = data_origin.replace('M5_AGREGADO_', '')
+            elif 'IMPUTADO' in data_origin:
+                method = 'imputation'
+                source = 'M5'
+
         # Tracking por fuente
         self.source_tracking[source]['total'] += 1
         self.source_tracking[source]['quality_sum'] += quality
@@ -102,34 +120,66 @@ class DataQualityTracker:
         self.yearly_tracking[year]['sources'][source] += 1
         self.yearly_tracking[year]['methods'][method] += 1
         
-        if source == 'M5':
-            self.yearly_tracking[year]['native_m5'] += 1
-        elif source == 'M1':
-            self.yearly_tracking[year]['aggregated_m1'] += 1
+        if data_origin:
+            if data_origin == 'M5_NATIVO':
+                self.yearly_tracking[year]['native_m5'] += 1
+            elif data_origin == 'M5_AGREGADO_M1':
+                self.yearly_tracking[year]['aggregated_m1'] += 1
+            elif data_origin.startswith('M5_AGREGADO_'):
+                tf = data_origin.replace('M5_AGREGADO_', '')
+                self.yearly_tracking[year]['other_timeframes'][tf] += 1
+            elif 'IMPUTADO' in data_origin:
+                self.yearly_tracking[year]['imputed_records'] += 1
+            else:
+                self.yearly_tracking[year]['other_timeframes'][data_origin] += 1
+
+            if 'IMPUTADO' not in data_origin:
+                self.yearly_tracking[year]['real_captured'] += 1
         else:
-            self.yearly_tracking[year]['other_timeframes'][source] += 1
-        
-        if method == 'imputation':
-            self.yearly_tracking[year]['imputed_records'] += 1
-        else:
-            self.yearly_tracking[year]['real_captured'] += 1
+            if source == 'M5':
+                self.yearly_tracking[year]['native_m5'] += 1
+            elif source == 'M1':
+                self.yearly_tracking[year]['aggregated_m1'] += 1
+            else:
+                self.yearly_tracking[year]['other_timeframes'][source] += 1
+
+            if method == 'imputation':
+                self.yearly_tracking[year]['imputed_records'] += 1
+            else:
+                self.yearly_tracking[year]['real_captured'] += 1
         
         # Monthly tracking
         self.monthly_tracking[year][month]['total_records'] += 1
         self.monthly_tracking[year][month]['sources'][source] += 1
         self.monthly_tracking[year][month]['methods'][method] += 1
-        
-        if source == 'M5':
-            self.monthly_tracking[year][month]['native_m5'] += 1
-        elif source == 'M1':
-            self.monthly_tracking[year][month]['aggregated_m1'] += 1
+
+        if data_origin:
+            if data_origin == 'M5_NATIVO':
+                self.monthly_tracking[year][month]['native_m5'] += 1
+            elif data_origin == 'M5_AGREGADO_M1':
+                self.monthly_tracking[year][month]['aggregated_m1'] += 1
+            elif data_origin.startswith('M5_AGREGADO_'):
+                tf = data_origin.replace('M5_AGREGADO_', '')
+                self.monthly_tracking[year][month]['other_timeframes'][tf] += 1
+            elif 'IMPUTADO' in data_origin:
+                self.monthly_tracking[year][month]['imputed_records'] += 1
+            else:
+                self.monthly_tracking[year][month]['other_timeframes'][data_origin] += 1
+
+            if 'IMPUTADO' not in data_origin:
+                self.monthly_tracking[year][month]['real_captured'] += 1
         else:
-            self.monthly_tracking[year][month]['other_timeframes'][source] += 1
-        
-        if method == 'imputation':
-            self.monthly_tracking[year][month]['imputed_records'] += 1
-        else:
-            self.monthly_tracking[year][month]['real_captured'] += 1
+            if source == 'M5':
+                self.monthly_tracking[year][month]['native_m5'] += 1
+            elif source == 'M1':
+                self.monthly_tracking[year][month]['aggregated_m1'] += 1
+            else:
+                self.monthly_tracking[year][month]['other_timeframes'][source] += 1
+
+            if method == 'imputation':
+                self.monthly_tracking[year][month]['imputed_records'] += 1
+            else:
+                self.monthly_tracking[year][month]['real_captured'] += 1
         
         # Hourly tracking
         self.hourly_completeness[year][hour]['captured'] += 1
@@ -244,6 +294,16 @@ class DataQualityTracker:
         """Actualizar completitud diaria"""
         self.daily_completeness[date]['captured'] = captured
         self.daily_completeness[date]['expected'] = expected
+
+        year = date.year
+        month = date.month
+        self.monthly_tracking[year][month]['expected_bars'] += expected
+        total = self.monthly_tracking[year][month]['total_records']
+        expected_total = self.monthly_tracking[year][month]['expected_bars']
+        if expected_total > 0:
+            self.monthly_tracking[year][month]['completeness'] = total / expected_total
+        else:
+            self.monthly_tracking[year][month]['completeness'] = 0
     
     def update_hourly_completeness(self, year: int, hour: int, captured: int, expected: int):
         """Actualizar completitud horaria"""
@@ -274,11 +334,18 @@ class DataQualityTracker:
         """Generar resumen general"""
         total_records = sum(tracking['total_records'] for tracking in self.yearly_tracking.values())
         total_imputed = sum(tracking['imputed_records'] for tracking in self.yearly_tracking.values())
-        
+
+        total_expected = sum(day['expected'] for day in self.daily_completeness.values())
+        total_captured = sum(day['captured'] for day in self.daily_completeness.values())
+
         return {
             'total_records': total_records,
             'total_imputed': total_imputed,
             'imputation_rate': total_imputed / total_records if total_records > 0 else 0,
+            'total_expected_bars': total_expected,
+            'total_captured_bars': total_captured,
+            'overall_completeness': (total_captured / total_expected * 100) if total_expected > 0 else 0,
+            'trading_days_analyzed': len(self.daily_completeness),
             'years_covered': list(self.yearly_tracking.keys()),
             'data_sources': list(self.source_tracking.keys()),
             'capture_methods': list(self.timeframe_contributions.keys())
@@ -550,16 +617,25 @@ class DataQualityTracker:
     
     def _analyze_data_origin(self) -> Dict:
         """Analizar origen de los datos con desglose detallado"""
-        total_native_m5 = sum(tracking['native_m5'] for tracking in self.yearly_tracking.values())
-        total_aggregated_m1 = sum(tracking['aggregated_m1'] for tracking in self.yearly_tracking.values())
-        total_imputed = sum(tracking['imputed_records'] for tracking in self.yearly_tracking.values())
-        total_records = sum(tracking['total_records'] for tracking in self.yearly_tracking.values())
-        
-        # Calcular otros timeframes
+        total_native_m5 = 0
+        total_aggregated_m1 = 0
+        total_imputed = 0
+        total_records = 0
         other_timeframes = {}
         for tracking in self.yearly_tracking.values():
-            for timeframe, count in tracking['other_timeframes'].items():
-                other_timeframes[timeframe] = other_timeframes.get(timeframe, 0) + count
+            for origin, count in tracking.get('origins', {}).items():
+                total_records += count
+                if origin == 'M5_NATIVO':
+                    total_native_m5 += count
+                elif origin == 'M5_AGREGADO_M1':
+                    total_aggregated_m1 += count
+                elif origin.startswith('M5_AGREGADO_'):
+                    tf = origin.replace('M5_AGREGADO_', '')
+                    other_timeframes[tf] = other_timeframes.get(tf, 0) + count
+                elif 'IMPUTADO' in origin:
+                    total_imputed += count
+                else:
+                    other_timeframes[origin] = other_timeframes.get(origin, 0) + count
         
         if total_records == 0:
             return {

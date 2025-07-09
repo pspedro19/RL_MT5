@@ -1119,27 +1119,35 @@ def main():
         logger.info("Aplicando trazabilidad estandarizada...")
         try:
             from utils.data_traceability import DataTraceabilityManager
-            
+
             traceability_manager = DataTraceabilityManager()
-            
-            # Si no tiene data_origin, aplicar trazabilidad
-            if 'data_origin' not in df_clean.columns:
-                logger.info("Aplicando trazabilidad estandarizada a todos los registros...")
-                
-                # Determinar el origen más probable basado en el procesamiento
-                # Como es un archivo HPC procesado, la mayoría debería ser M5_NATIVO
-                df_clean['data_origin'] = 'M5_NATIVO'
-                df_clean['quality_score'] = 1.0
-                
-                # Para registros imputados, cambiar el origen
-                if 'imputed' in df_clean.columns:
-                    imputed_mask = df_clean['imputed'] == True
-                    df_clean.loc[imputed_mask, 'data_origin'] = 'M5_IMPUTADO_BROWNIAN'
-                    df_clean.loc[imputed_mask, 'quality_score'] = 0.8
-                
-                logger.info(f"Trazabilidad aplicada: {df_clean['data_origin'].value_counts().to_dict()}")
+
+            # Aplicar asignación de origen a todos los registros
+            if 'imputed' in df_clean.columns and df_clean['imputed'].any():
+                imputed_mask = df_clean['imputed'] == True
+                df_imputed = traceability_manager.assign_data_origin(
+                    df_clean.loc[imputed_mask],
+                    capture_method='brownian_bridge',
+                    source_timeframe='M5',
+                    is_imputed=True,
+                    imputation_method='brownian_bridge'
+                )
+                df_real = traceability_manager.assign_data_origin(
+                    df_clean.loc[~imputed_mask],
+                    capture_method='aggregation',
+                    source_timeframe='M5',
+                    is_imputed=False
+                )
+                df_clean = pd.concat([df_real, df_imputed]).sort_values('time').reset_index(drop=True)
             else:
-                logger.info("DataFrame ya tiene trazabilidad aplicada")
+                df_clean = traceability_manager.assign_data_origin(
+                    df_clean,
+                    capture_method='aggregation',
+                    source_timeframe='M5',
+                    is_imputed=False
+                )
+
+            logger.info(f"Trazabilidad aplicada: {df_clean['data_origin'].value_counts().to_dict()}")
                 
         except Exception as e:
             logger.warning(f"Error aplicando trazabilidad: {e}")
@@ -1166,6 +1174,19 @@ def main():
         # Tiempo total de ejecución
         engine.quality_tracker.execution_times['total'] = time.time() - pipeline_start_time
         
+        # Calcular completitud diaria usando configuracion de mercado
+        try:
+            start_range = df_clean['time'].min()
+            end_range = df_clean['time'].max()
+            expected_map = engine.quality_tracker.calculate_expected_bars(start_range, end_range)
+            df_clean['date'] = df_clean['time'].dt.floor('D')
+            for day, expected in expected_map.items():
+                captured = (df_clean['date'] == day).sum()
+                engine.quality_tracker.update_daily_completeness(day, int(captured), expected)
+            df_clean.drop(columns=['date'], inplace=True)
+        except Exception as e:
+            logger.warning(f"Error calculando completitud diaria: {e}")
+
         # Generar reporte de calidad
         logger.info("\nGenerando reporte de calidad...")
         quality_report = engine.get_quality_report()
