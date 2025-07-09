@@ -244,7 +244,7 @@ class QualityReporter:
         
         return recommendations
     
-    def generate_checklist(self, df: pd.DataFrame) -> Dict:
+    def _generate_checklist(self, df: pd.DataFrame) -> Dict:
         """
         Generar checklist de calidad detallado
         
