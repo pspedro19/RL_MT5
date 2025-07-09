@@ -170,6 +170,21 @@ def test_quality_tracker():
     for source, details in origin_analysis['source_details'].items():
         print(f"- {source}: {details['percentage']:.1f}% ({details['count']} registros)")
 
+def test_early_close_expected_bars():
+    """Probar cálculo de barras en días de cierre temprano"""
+    print("\n=== Probando cálculo de barras esperadas para cierre temprano ===")
+
+    tracker = DataQualityTracker('US500')
+    tz = pytz.timezone('US/Eastern')
+    early_close_day = datetime(2024, 11, 27, 12, 0, tzinfo=tz)
+
+    result = tracker.calculate_expected_bars(early_close_day, early_close_day)
+    key = datetime.combine(early_close_day.date(), datetime.min.time())
+
+    expected = result.get(key)
+    print(f"Barras esperadas {early_close_day.date()}: {expected}")
+    assert expected == 53, "Las barras esperadas deben ser 53 en días de cierre temprano"
+
 def test_report_generation():
     """Probar la generación de reportes mejorados"""
     print("\n=== Probando generación de reportes ===")
@@ -241,6 +256,7 @@ def main():
     try:
         test_gap_detection()
         test_quality_tracker()
+        test_early_close_expected_bars()
         test_report_generation()
         
         print("\n=== TODAS LAS PRUEBAS COMPLETADAS ===")
