@@ -507,6 +507,9 @@ def generate_markdown_report_enhanced(df: pd.DataFrame, analysis: Dict, capture_
 - **Gaps detectados:** {gaps_summary.get('total_gaps', 0)}
 - **Gaps llenados:** {gaps_summary.get('gaps_filled', 0)} ({quality_report.get('gap_analysis', {}).get('gap_fill_rate', 0):.1f}%)
 - **Score promedio de calidad:** {df['quality_score'].mean():.3f}
+- **Gaps > {gaps_summary.get('large_gap_threshold', 0)}m reintentos:** {gaps_summary.get('retried_large_gaps', 0)}
+- **Gaps > {gaps_summary.get('large_gap_threshold', 0)}m sin resolver:** {gaps_summary.get('unresolved_large_gaps', 0)}
+
 
 ### Distribución de Fuentes de Datos
 """

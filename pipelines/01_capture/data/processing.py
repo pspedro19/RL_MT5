@@ -218,7 +218,7 @@ def is_within_market_hours(start_time: datetime, end_time: datetime, instrument:
         end_hour = end_et.hour + end_et.minute / 60
         return 9.5 <= start_hour <= 16 and 9.5 <= end_hour <= 16
 
-def brownian_bridge_imputation_numba_tracked(df: pd.DataFrame, quality_tracker: DataQualityTracker, 
+def brownian_bridge_imputation_numba_tracked(df: pd.DataFrame, quality_tracker: DataQualityTracker,
                                             max_gap_minutes: int = 30) -> pd.DataFrame:
     """Imputacion optimizada usando Numba con tracking y clasificación de gaps"""
     if df.empty or not NUMBA_AVAILABLE:
@@ -341,8 +341,43 @@ def brownian_bridge_imputation_numba_tracked(df: pd.DataFrame, quality_tracker: 
     
     df = df.reset_index()
     logger.info(f"Registros imputados: {len(imputed_records)}")
-    
+
     return df
+
+def handle_large_gaps(df: pd.DataFrame, quality_tracker: DataQualityTracker,
+                      max_gap_minutes: int = 60, capture_engine: object = None,
+                      recapture: bool = False) -> pd.DataFrame:
+    """Detectar gaps mayores a un umbral y opcionalmente re-capturarlos."""
+    gaps_df = detect_gaps_optimized(df)
+    large_gaps = gaps_df[gaps_df['gap_minutes'] > max_gap_minutes]
+    if large_gaps.empty:
+        return df
+
+    logger.warning(f"Se encontraron {len(large_gaps)} gaps mayores a {max_gap_minutes} minutos")
+
+    df = df.set_index('time').sort_index()
+
+    for _, gap in large_gaps.iterrows():
+        gap_start = gap['gap_start']
+        gap_end = gap['gap_end']
+
+        if recapture and capture_engine is not None:
+            try:
+                recaptured = capture_engine.capture_with_all_methods(gap_start, gap_end)
+                if recaptured is not None and not recaptured.empty:
+                    df = pd.concat([df, recaptured.set_index('time')]).drop_duplicates().sort_index()
+                    quality_tracker.track_gap(gap_start, gap_end, gap['gap_minutes'],
+                                             filled_by='recaptured', reason='large_gap')
+                    quality_tracker.large_gap_retried += 1
+                    continue
+            except Exception as e:
+                logger.error(f"Error al recapturar gap {gap_start} - {gap_end}: {e}")
+
+        quality_tracker.track_gap(gap_start, gap_end, gap['gap_minutes'],
+                                 filled_by='unresolved', reason='large_gap')
+        quality_tracker.large_gap_unresolved += 1
+
+    return df.reset_index()
 
 def clean_data_optimized(df: pd.DataFrame, instrument: str = 'US500') -> pd.DataFrame:
     """Limpiar datos de manera optimizada"""
@@ -453,6 +488,15 @@ def validate_data_integrity(df: pd.DataFrame, instrument: str = 'US500') -> Dict
                 'count': len(large_gaps),
                 'max_gap_minutes': large_gaps.max().total_seconds() / 60,
                 'avg_gap_minutes': large_gaps.mean().total_seconds() / 60
+            }
+
+        # Gaps extremadamente largos que podrían requerir re-captura
+        extreme_gaps = time_diffs[time_diffs > pd.Timedelta(minutes=60)]
+        if len(extreme_gaps) > 0:
+            validation_results['temporal_issues']['extreme_gaps'] = {
+                'count': len(extreme_gaps),
+                'max_gap_minutes': extreme_gaps.max().total_seconds() / 60,
+                'avg_gap_minutes': extreme_gaps.mean().total_seconds() / 60
             }
         
         # Verificar duplicados temporales
