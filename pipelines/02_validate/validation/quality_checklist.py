@@ -66,11 +66,14 @@ class QualityChecklist:
         
         # 8. Análisis de splits
         checklist.update(self._check_splits_analysis(train_df, val_df))
-        
-        # 9. Calcular score general
+
+        # 9. Originalidad del dataset e imputaciones diarias
+        checklist.update(self._check_imputation_rates(df))
+
+        # 10. Calcular score general
         checklist['overall_score'] = self._calculate_overall_score(checklist)
-        
-        # 10. Estado general
+
+        # 11. Estado general
         checklist['overall_status'] = self._determine_overall_status(checklist)
         
         logger.info(f"Checklist completado. Score: {checklist['overall_score']:.1f}/100")
@@ -309,7 +312,7 @@ class QualityChecklist:
         # Verificar proporción
         train_ratio = train_size / total_size if total_size > 0 else 0
         val_ratio = val_size / total_size if total_size > 0 else 0
-        
+
         return {
             'splits_analysis': {
                 'train_size': train_size,
@@ -322,6 +325,39 @@ class QualityChecklist:
                 'train_end': str(train_df['time'].max()) if len(train_df) > 0 else None,
                 'val_start': str(val_df['time'].min()) if len(val_df) > 0 else None,
                 'val_end': str(val_df['time'].max()) if len(val_df) > 0 else None
+            }
+        }
+
+    def _check_imputation_rates(self, df: pd.DataFrame) -> Dict:
+        """Calcular originalidad del dataset y evaluar tasa de imputaci\u00f3n diaria"""
+        logger.info("Calculando originalidad del dataset e imputaciones diarias...")
+
+        if 'data_flag' in df.columns:
+            imputed_mask = df['data_flag'].str.contains('imputed', case=False, na=False)
+        elif 'data_origin' in df.columns:
+            imputed_mask = df['data_origin'].str.contains('IMPUTADO', case=False, na=False)
+        else:
+            imputed_mask = pd.Series(False, index=df.index)
+
+        total_records = len(df)
+        total_imputed = int(imputed_mask.sum())
+        originality = (total_records - total_imputed) / total_records * 100 if total_records > 0 else 0
+
+        daily_counts = df.groupby(df['time'].dt.date).size()
+        daily_imputed = df[imputed_mask].groupby(df['time'].dt.date).size()
+        rates = {}
+        threshold = 0.02
+        for date, total in daily_counts.items():
+            imputed = daily_imputed.get(date, 0)
+            rate = imputed / total if total > 0 else 0
+            if rate > threshold:
+                rates[str(date)] = rate
+
+        return {
+            'imputation_rates': {
+                'dataset_originality': originality,
+                'threshold': threshold,
+                'dates_over_threshold': rates
             }
         }
     

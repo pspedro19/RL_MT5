@@ -364,11 +364,15 @@ def aggregate_quality_reports(symbol: str, start_year: str, end_year: str) -> No
     report2 = load_json(validated_dir / "pipeline_info.json")
     checklist = load_json(validated_dir / "quality_checklist_report.json")
 
+    imputation_info = checklist.get('imputation_rates', {})
+
     summary = {
         'completeness_pct': report1.get('summary', {}).get('overall_completeness'),
         'integrity_passed': report2.get('market_validations', {}).get('market_hours', {}).get('is_valid'),
         'quality_score': checklist.get('overall_score'),
-        'total_records': report1.get('summary', {}).get('total_records')
+        'total_records': report1.get('summary', {}).get('total_records'),
+        'dataset_originality': imputation_info.get('dataset_originality'),
+        'dates_over_threshold': imputation_info.get('dates_over_threshold', {})
     }
 
     final_report = {
@@ -397,7 +401,9 @@ def aggregate_quality_reports(symbol: str, start_year: str, end_year: str) -> No
             f"- **Completitud:** {summary.get('completeness_pct', 'N/A')}%",
             f"- **Integridad de mercado:** {summary.get('integrity_passed')}",
             f"- **Score checklist:** {summary.get('quality_score')}",
-            f"- **Registros totales:** {summary.get('total_records')}"
+            f"- **Registros totales:** {summary.get('total_records')}",
+            f"- **Originalidad del dataset:** {summary.get('dataset_originality', 'N/A')}%",
+            f"- **Días sobre umbral de imputación:** {len(summary.get('dates_over_threshold', {}))}"
         ]
         with open(output_md, 'w', encoding='utf-8') as f:
             f.write('\n'.join(md_lines))
