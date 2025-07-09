@@ -33,18 +33,18 @@ class DataNormalizer:
         
         # Features por categoría
         self.feature_categories = {
-            'price': ['open', 'high', 'low', 'close', 'vwap'],
-            'volume': ['tick_volume', 'volume_sma_20', 'volume_relative', 
+            'price': ['open', 'high', 'low', 'close', 'vwap', 'adj_factor'],
+            'volume': ['tick_volume', 'volume_sma_20', 'volume_relative',
                       'volume_ratio', 'volume_delta'],
-            'technical_bounded': ['rsi_14', 'rsi_28', 'stochastic_k', 
+            'technical_bounded': ['rsi_14', 'rsi_28', 'stochastic_k',
                                 'stochastic_d', 'percent_r'],
-            'technical_unbounded': ['macd', 'macd_signal', 'macd_histogram', 
-                                  'atr_14', 'bollinger_width'],
+            'technical_unbounded': ['macd', 'macd_signal', 'macd_histogram',
+                                  'atr_14', 'bollinger_width', 'cb_level'],
             'returns': ['log_return', 'return_5m', 'cumulative_return_session'],
             'temporal': ['hour_sin', 'hour_cos', 'minute_sin', 'minute_cos',
                         'dow_sin', 'dow_cos'],
             'binary': ['doji', 'hammer', 'shooting_star', 'bullish_engulfing',
-                      'bearish_engulfing'],
+                      'bearish_engulfing', 'halt_flag'],
             'exclude': ['time', 'symbol', 'data_flag', 'quality_score']
         }
         

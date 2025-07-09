@@ -34,9 +34,14 @@ def generate_json_report_enhanced(df: pd.DataFrame, analysis: Dict, capture_stat
         'capture_statistics': capture_stats,
         'data_analysis': analysis,
         'quality_metrics': quality_report,
-        'feature_list': [col for col in df.columns if col not in 
-                        ['time', 'open', 'high', 'low', 'close', 'tick_volume', 
+        'feature_list': [col for col in df.columns if col not in
+                        ['time', 'open', 'high', 'low', 'close', 'tick_volume',
                          'spread', 'real_volume', 'data_flag', 'quality_score']],
+        'contextual_info': {
+            'adj_factor_present': 'adj_factor' in df.columns,
+            'cb_level_present': 'cb_level' in df.columns,
+            'halt_flag_present': 'halt_flag' in df.columns
+        },
         'data_quality_summary': {
             'null_counts': df.isnull().sum().to_dict(),
             'data_types': df.dtypes.astype(str).to_dict(),
@@ -186,6 +191,18 @@ def generate_quality_markdown_report(quality_report: Dict, output_path: str,
             source = record.get('source', 'N/A')
             flag = record.get('data_flag', 'N/A')
             md_content.append(f"| {timestamp} | {score:.3f} | {source} | {flag} |")
+        md_content.append("")
+
+    # Sección contextual
+    contextual_cols = ['adj_factor', 'cb_level', 'halt_flag']
+    available = [c for c in contextual_cols if c in df.columns]
+    if available:
+        md_content.append("## 📝 CONTEXTO ADICIONAL")
+        for col in available:
+            if col == 'halt_flag':
+                md_content.append(f"- **{col}:** {df[col].sum()} eventos de halt")
+            else:
+                md_content.append(f"- **{col}:** rango {df[col].min()} - {df[col].max()}")
         md_content.append("")
     
     # Tiempos de ejecución

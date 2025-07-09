@@ -50,6 +50,10 @@ class DataCleaner:
             'temporal': {
                 'method': 'none',
                 'outlier_treatment': 'none'
+            },
+            'market_status': {
+                'method': 'forward_fill',
+                'outlier_treatment': 'none'
             }
         }
         
@@ -59,13 +63,15 @@ class DataCleaner:
             'technical_indicators': [
                 'rsi_14', 'rsi_28', 'stochastic_k', 'stochastic_d',
                 'macd', 'macd_signal', 'macd_histogram', 'atr_14',
-                'sma_20', 'sma_20_slope', 'realized_vol_20'
+                'sma_20', 'sma_20_slope', 'realized_vol_20',
+                'cb_level'
             ],
             'volume': ['tick_volume', 'volume_sma_20', 'volume_ratio'],
-            'price': ['open', 'high', 'low', 'close', 'vwap'],
-            'binary': ['doji', 'hammer', 'shooting_star', 
+            'price': ['open', 'high', 'low', 'close', 'vwap', 'adj_factor'],
+            'binary': ['doji', 'hammer', 'shooting_star',
                        'bullish_engulfing', 'bearish_engulfing'],
-            'temporal': ['hour_sin', 'hour_cos', 'minute_sin', 'minute_cos']
+            'temporal': ['hour_sin', 'hour_cos', 'minute_sin', 'minute_cos'],
+            'market_status': ['halt_flag']
         }
         
     def clean_nan_values(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict]:
@@ -337,6 +343,9 @@ class DataCleaner:
         
         # Binarios
         for feature in self.feature_categories.get('binary', []):
+            if feature in df_final.columns:
+                df_final[feature] = df_final[feature].astype(int)
+        for feature in self.feature_categories.get('market_status', []):
             if feature in df_final.columns:
                 df_final[feature] = df_final[feature].astype(int)
         
