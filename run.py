@@ -340,6 +340,71 @@ def create_execution_report(success, pipeline_results, start_time, end_time):
     except Exception as e:
         safe_print(f"⚠️  No se pudo guardar reporte: {e}")
 
+def aggregate_quality_reports(symbol: str, start_year: str, end_year: str) -> None:
+    """Unir reportes de calidad de ambos pipelines y generar resumen"""
+    try:
+        p1_path = f"data/quality_report_{symbol.lower()}_{start_year}_{end_year}.json"
+        if not os.path.exists(p1_path):
+            candidates = glob.glob(f"data/quality_report_{symbol.lower()}*.json")
+            p1_path = sorted(candidates, key=os.path.getmtime, reverse=True)[0] if candidates else None
+    except Exception:
+        p1_path = None
+
+    def load_json(path):
+        if path and os.path.exists(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception as e:
+                safe_print(f"⚠️  No se pudo cargar {path}: {e}")
+        return {}
+
+    report1 = load_json(p1_path)
+    validated_dir = Path("data/validated")
+    report2 = load_json(validated_dir / "pipeline_info.json")
+    checklist = load_json(validated_dir / "quality_checklist_report.json")
+
+    summary = {
+        'completeness_pct': report1.get('summary', {}).get('overall_completeness'),
+        'integrity_passed': report2.get('market_validations', {}).get('market_hours', {}).get('is_valid'),
+        'quality_score': checklist.get('overall_score'),
+        'total_records': report1.get('summary', {}).get('total_records')
+    }
+
+    final_report = {
+        'generated_at': datetime.now().isoformat(),
+        'pipeline_01_report': report1,
+        'pipeline_02_info': report2,
+        'pipeline_02_checklist': checklist,
+        'summary': summary
+    }
+
+    output_json = validated_dir / "final_quality_report.json"
+    try:
+        with open(output_json, 'w', encoding='utf-8') as f:
+            json.dump(final_report, f, indent=2, ensure_ascii=False)
+        safe_print(f"📊 Reporte final de calidad guardado: {output_json}")
+    except Exception as e:
+        safe_print(f"⚠️  No se pudo guardar reporte final: {e}")
+
+    # Generar versión Markdown sencilla
+    output_md = validated_dir / "final_quality_report.md"
+    try:
+        md_lines = [
+            "# Resumen Final de Calidad",
+            f"Generado: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            "",
+            f"- **Completitud:** {summary.get('completeness_pct', 'N/A')}%",
+            f"- **Integridad de mercado:** {summary.get('integrity_passed')}",
+            f"- **Score checklist:** {summary.get('quality_score')}",
+            f"- **Registros totales:** {summary.get('total_records')}"
+        ]
+        with open(output_md, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(md_lines))
+        safe_print(f"📊 Reporte final Markdown guardado: {output_md}")
+    except Exception as e:
+        safe_print(f"⚠️  No se pudo guardar reporte Markdown: {e}")
+
 def main():
     """Función principal mejorada"""
     parser = argparse.ArgumentParser(description='Pipeline completo con limpieza automática y validaciones robustas')
@@ -470,6 +535,9 @@ def main():
     # Crear reporte de ejecución
     overall_success = success_count == total_pipelines
     create_execution_report(overall_success, pipeline_results, execution_start, execution_end)
+
+    # Generar reporte de calidad combinado
+    aggregate_quality_reports(args.symbol, args.start, args.end)
     
     if overall_success:
         safe_print("\n🎉 ¡PIPELINE COMPLETADO EXITOSAMENTE!")
@@ -487,5 +555,4 @@ if __name__ == "__main__":
         sys.exit(1)
     except Exception as e:
         safe_print(f"\n❌ Error crítico: {e}")
-        logger.error(f"Error crítico en main: {e}", exc_info=True)
-        sys.exit(1) 
+        logger.error(f"Error crítico en main: {e}", exc_info=True)        sys.exit(1) 
