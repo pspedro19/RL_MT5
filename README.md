@@ -21,12 +21,14 @@ RL_SP500/
 │   │   ├── data/           # Data connectors and processors
 │   │   ├── features/       # Technical indicators
 │   │   ├── utils/          # Utility functions
-│   │   └── main.py         # Main capture script
+│   │   ├── main.py         # Main capture script
+│   │   └── run.py          # Standalone capture entry
 │   ├── 02_validate/        # Data validation pipeline
 │   │   ├── analysis/       # Data analysis tools
 │   │   ├── preprocessing/  # Data cleaning and normalization
 │   │   ├── validation/     # Validation modules
-│   │   └── main.py         # Main validation script
+│   │   ├── main.py         # Main validation script
+│   │   └── run.py          # Standalone validation entry
 │   └── requirements.txt    # Python dependencies
 ├── data/                   # Data storage
 │   ├── validated/         # Validated datasets
@@ -88,6 +90,17 @@ Execute the full pipeline from the root directory:
 ```bash
 python run.py --pipeline full --instrument US500
 ```
+
+### Script Entry Points
+
+The repository contains several run scripts:
+
+- **`run.py` (root)** – orchestrates the full workflow (capture + validation).
+  Use this as the default entry point.
+- **`pipelines/01_capture/run.py`** – runs only the capture phase for quick
+  data downloads or debugging.
+- **`pipelines/02_validate/run.py`** – validates an existing dataset without
+  executing the capture step.
 
 ## 📊 Data Quality Features
 
