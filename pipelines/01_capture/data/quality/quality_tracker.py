@@ -13,7 +13,11 @@ import warnings
 import pytz
 
 from config.constants import MARKET_CONFIGS, DATA_ORIGINS
-from utils.market_calendar import get_expected_trading_days, get_expected_trading_days_forex
+from utils.market_calendar import (
+    get_expected_trading_days,
+    get_expected_trading_days_forex,
+    get_early_close_days,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -293,10 +297,20 @@ class DataQualityTracker:
         else:
             # Lógica para mercado USA
             trading_days = get_expected_trading_days(start_date, end_date, self.instrument)
-            
+
+            # Determinar días con cierre temprano (13:00)
+            early_close_dates = set()
+            for year in range(start_date.year, end_date.year + 1):
+                early_close_days = get_early_close_days(year)
+                early_close_dates.update({dt.date() for dt in early_close_days.keys()})
+
             for day in trading_days:
                 current = datetime.combine(day, datetime.min.time())
-                expected[current] = self.market_config['bars_per_day']  # 78 bars para US500
+                if day in early_close_dates:
+                    # Mercado cierra a la 1 PM -> 53 barras de 5 minutos
+                    expected[current] = 53
+                else:
+                    expected[current] = self.market_config['bars_per_day']  # 78 bars para US500
         
         return expected
     
