@@ -450,7 +450,46 @@ class ValidationPipeline:
     def _generate_advanced_reports(self, df: pd.DataFrame, analysis: Dict, quality_report: Dict, output_dir: str):
         """Generar reportes avanzados"""
         logger.info("Generando reportes avanzados...")
-        
+        gap_reporter = GapReporter(log_dir=output_dir)
+
+        # Guardar métricas y registros adicionales
+        try:
+            # Cobertura diaria
+            coverage_metrics = gap_reporter.daily_coverage_metrics(df)
+            gap_reporter.save_daily_coverage(coverage_metrics)
+
+            # Gaps y duplicados
+            gaps_info = gap_reporter.detect_gaps(df)
+            gap_reporter.save_gap_log(gaps_info['gaps'])
+            gap_reporter.save_gaps(gaps_info['gaps'])
+
+            duplicates_df = df[df.duplicated(subset=['time'], keep=False)]
+            gap_reporter.save_duplicates(duplicates_df)
+
+            # Outliers sencillos por IQR
+            numeric_cols = df.select_dtypes(include=[np.number]).columns
+            outlier_records = []
+            for col in numeric_cols:
+                q1 = df[col].quantile(0.25)
+                q3 = df[col].quantile(0.75)
+                iqr = q3 - q1
+                lower = q1 - 1.5 * iqr
+                upper = q3 + 1.5 * iqr
+                mask = (df[col] < lower) | (df[col] > upper)
+                if mask.any():
+                    tmp = df.loc[mask, ['time', col]].copy()
+                    tmp['feature'] = col
+                    tmp.rename(columns={col: 'value'}, inplace=True)
+                    outlier_records.append(tmp)
+            outliers_df = pd.concat(outlier_records, ignore_index=True) if outlier_records else pd.DataFrame()
+            gap_reporter.save_outliers(outliers_df)
+
+            nan_summary = df.isna().sum().to_dict()
+            nan_summary['total_nan'] = int(sum(nan_summary.values()))
+            gap_reporter.save_nan_summary(nan_summary)
+        except Exception as e:
+            logger.warning(f"Error generando archivos de gap reporter: {e}")
+
         try:
             # Importar funciones de reportes
             from reports.advanced_reports import (

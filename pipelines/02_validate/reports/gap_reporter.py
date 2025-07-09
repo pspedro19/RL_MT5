@@ -1,7 +1,8 @@
 import pandas as pd
 import pandas_market_calendars as mcal
 import os
-from typing import List, Dict, Optional
+import json
+from typing import List, Dict, Optional, Union
 
 class GapReporter:
     """
@@ -57,10 +58,47 @@ class GapReporter:
         df['date'] = df[time_col].dt.date
         daily_expected = market_df.groupby('date').size()
         daily_actual = df.groupby('date').size()
-        daily_coverage = (daily_actual / daily_expected * 100).fillna(0)
-        metrics = pd.DataFrame({
+        daily_coverage = (daily_actual / daily_expected * 100).fillna(0)        metrics = pd.DataFrame({
             'expected_slots': daily_expected,
             'actual_slots': daily_actual,
             'coverage_pct': daily_coverage
         })
-        return metrics 
+        return metrics
+
+    def save_daily_coverage(self, metrics: pd.DataFrame, filename: str = 'daily_coverage.csv'):
+        """Guardar métricas de cobertura diaria en CSV"""
+        if metrics is None or metrics.empty:
+            return
+        metrics.to_csv(os.path.join(self.log_dir, filename))
+
+    def save_gaps(self, gaps: Union[List[Dict], pd.DataFrame], filename: str = 'gaps.parquet'):
+        """Guardar lista de gaps detectados en formato Parquet"""
+        if isinstance(gaps, list):
+            if not gaps:
+                return
+            df_gaps = pd.DataFrame(gaps)
+        else:
+            df_gaps = gaps
+        if df_gaps is None or df_gaps.empty:
+            return
+        df_gaps.to_parquet(os.path.join(self.log_dir, filename), index=False)
+
+    def save_duplicates(self, duplicates: pd.DataFrame, filename: str = 'duplicates.parquet'):
+        """Guardar registros duplicados en Parquet"""
+        if duplicates is None or duplicates.empty:
+            return
+        duplicates.to_parquet(os.path.join(self.log_dir, filename), index=False)
+
+    def save_outliers(self, outliers: pd.DataFrame, filename: str = 'outliers.parquet'):
+        """Guardar registros considerados outliers"""
+        if outliers is None or outliers.empty:
+            return
+        outliers.to_parquet(os.path.join(self.log_dir, filename), index=False)
+
+    def save_nan_summary(self, nan_summary: Dict, filename: str = 'nan_summary.json'):
+        """Guardar resumen de valores NaN en JSON"""
+        if not nan_summary:
+            return
+        path = os.path.join(self.log_dir, filename)
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(nan_summary, f, indent=2, default=str)
