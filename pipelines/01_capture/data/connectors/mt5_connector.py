@@ -20,6 +20,7 @@ from data.processing import (
     process_ticks_to_ohlc, resample_timeframe_to_m5,
     combine_and_prioritize_dataframes
 )
+from utils.exceptions import MT5InitializationError, DataRetrievalError
 
 logger = logging.getLogger(__name__)
 
@@ -47,32 +48,33 @@ class MT5Connector:
         
         logger.info(f"Conector MT5 inicializado para {instrument}")
     
-    def _initialize_mt5(self) -> bool:
+    def _initialize_mt5(self) -> None:
         """Inicializar conexión con MT5"""
         try:
             if not mt5.initialize():
-                logger.error("Error inicializando MT5")
-                return False
+                raise MT5InitializationError("Error inicializando MT5")
             
             # Buscar símbolo
             self.symbol = self._find_symbol()
             if not self.symbol:
-                logger.error(f"No se pudo encontrar símbolo para {self.instrument}")
-                return False
+                raise MT5InitializationError(
+                    f"No se pudo encontrar símbolo para {self.instrument}"
+                )
             
             # Verificar que el símbolo está disponible
             symbol_info = mt5.symbol_info(self.symbol)
             if symbol_info is None:
-                logger.error(f"Símbolo {self.symbol} no disponible en MT5")
-                return False
+                raise MT5InitializationError(
+                    f"Símbolo {self.symbol} no disponible en MT5"
+                )
             
             self.connected = True
             logger.info(f"MT5 conectado exitosamente. Símbolo: {self.symbol}")
-            return True
+            return
             
         except Exception as e:
             logger.error(f"Error inicializando MT5: {e}")
-            return False
+            raise
     
     def _find_symbol(self) -> Optional[str]:
         """Encontrar el símbolo correcto para el instrumento"""
@@ -136,7 +138,7 @@ class MT5Connector:
             return final_df
         else:
             logger.error("No se pudieron capturar datos con ningún método")
-            return pd.DataFrame()
+            raise DataRetrievalError("No se pudieron capturar datos con ningún método")
     
     def _capture_rates_comprehensive(self, start_date: datetime, end_date: datetime) -> pd.DataFrame:
         """Capturar datos de rates usando todos los métodos disponibles"""

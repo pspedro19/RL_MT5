@@ -26,9 +26,10 @@ from config.constants import (
     RESAMPLING_CONFIG, MARKET_CONFIGS, DATA_ORIGINS
 )
 from utils.data_traceability import DataTraceabilityManager
+from utils.exceptions import MT5InitializationError, DataRetrievalError
 from data.quality.quality_tracker import DataQualityTracker
 from data.processing import (
-    process_ticks_to_ohlc, resample_timeframe_to_m5, 
+    process_ticks_to_ohlc, resample_timeframe_to_m5,
     combine_and_prioritize_dataframes
 )
 
@@ -64,22 +65,21 @@ if RAY_AVAILABLE:
             self.symbol = symbol
             self.mt5_connected = False
             
-        def connect_mt5(self) -> bool:
+        def connect_mt5(self) -> None:
             """Conectar MT5 en el worker"""
             try:
                 if not mt5.initialize():
-                    return False
+                    raise MT5InitializationError("Error inicializando MT5 en worker")
                 self.mt5_connected = True
-                return True
             except Exception as e:
                 logger.error(f"Worker {self.worker_id} - Error conectando MT5: {e}")
-                return False
+                raise
                 
         def capture_segment(self, method: str, timeframe: str, tf_config: dict,
                            start: datetime, end: datetime) -> Optional[pd.DataFrame]:
             """Capturar segmento de datos"""
-            if not self.mt5_connected and not self.connect_mt5():
-                return None
+            if not self.mt5_connected:
+                self.connect_mt5()
                 
             try:
                 if method == 'rates_range':
@@ -342,16 +342,22 @@ class HpcCaptureEngine:
         source_timeframes = []
         
         # 1. Intentar captura con métodos de rates (OHLC)
-        rates_data = self._capture_with_rates_methods(start_date, end_date)
-        if not rates_data.empty:
-            all_dataframes.append(rates_data)
-            source_timeframes.append('rates_combined')
-        
+        try:
+            rates_data = self._capture_with_rates_methods(start_date, end_date)
+            if not rates_data.empty:
+                all_dataframes.append(rates_data)
+                source_timeframes.append('rates_combined')
+        except DataRetrievalError as e:
+            logger.warning(f"Rates fallidos: {e}")
+
         # 2. Intentar captura con métodos de ticks
-        ticks_data = self._capture_with_ticks_methods(start_date, end_date)
-        if not ticks_data.empty:
-            all_dataframes.append(ticks_data)
-            source_timeframes.append('ticks_aggregated')
+        try:
+            ticks_data = self._capture_with_ticks_methods(start_date, end_date)
+            if not ticks_data.empty:
+                all_dataframes.append(ticks_data)
+                source_timeframes.append('ticks_aggregated')
+        except DataRetrievalError as e:
+            logger.warning(f"Ticks fallidos: {e}")
         
         # 3. Combinar y priorizar todos los datos
         if all_dataframes:
@@ -366,7 +372,7 @@ class HpcCaptureEngine:
             return final_df
         else:
             logger.error("No se pudieron capturar datos con ningún método")
-            return pd.DataFrame()
+            raise DataRetrievalError("No se pudieron capturar datos con ningún método")
     
     def _capture_with_rates_methods(self, start_date: datetime, end_date: datetime) -> pd.DataFrame:
         """Capturar datos usando métodos de rates (OHLC)"""
@@ -415,14 +421,14 @@ class HpcCaptureEngine:
         if rates_dataframes:
             combined_rates = pd.concat(rates_dataframes, ignore_index=True)
             combined_rates = combined_rates.sort_values('time').reset_index(drop=True)
-            
+
             # Resamplear a M5
             combined_rates = self._resample_all_to_m5(combined_rates, timeframes_used)
-            
+
             logger.info(f"Rates combinados: {len(combined_rates)} registros")
             return combined_rates
-        
-        return pd.DataFrame()
+
+        raise DataRetrievalError("No se pudieron capturar datos de rates")
     
     def _capture_with_ticks_methods(self, start_date: datetime, end_date: datetime) -> pd.DataFrame:
         """Capturar datos usando métodos de ticks"""
@@ -454,14 +460,14 @@ class HpcCaptureEngine:
         if all_ticks_data:
             combined_ticks = pd.concat(all_ticks_data, ignore_index=True)
             combined_ticks = combined_ticks.sort_values('time').reset_index(drop=True)
-            
+
             # Convertir ticks a OHLC M5
             ohlc_from_ticks = process_ticks_to_ohlc(combined_ticks, 'M5')
-            
+
             logger.info(f"Ticks procesados a OHLC: {len(ohlc_from_ticks)} barras")
             return ohlc_from_ticks
-        
-        return pd.DataFrame()
+
+        raise DataRetrievalError("No se pudieron capturar datos de ticks")
     
     def _capture_single_timeframe(self, timeframe: str, method: str, 
                                  start_date: datetime, end_date: datetime) -> pd.DataFrame:
