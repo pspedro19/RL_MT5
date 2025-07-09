@@ -23,10 +23,17 @@ logger = logging.getLogger(__name__)
 
 class DataQualityTracker:
     """Sistema avanzado de tracking de calidad y completitud de datos"""
-    
-    def __init__(self, instrument: str = 'US500'):
+
+    def __init__(self, instrument: str = 'US500', large_gap_threshold: int = 60):
         self.instrument = instrument
         self.market_config = MARKET_CONFIGS.get(instrument, MARKET_CONFIGS['US500'])
+
+        # Umbral para considerar un gap como "grande"
+        self.large_gap_threshold = large_gap_threshold
+
+        # Contadores de re-captura de gaps grandes
+        self.large_gap_retried = 0
+        self.large_gap_unresolved = 0
         
         self.source_tracking = defaultdict(lambda: defaultdict(int))
         self.gap_tracking = defaultdict(list)
@@ -208,12 +215,15 @@ class DataQualityTracker:
                 key=lambda x: x['quality']
             )[:100]
     
-    def track_gap(self, gap_start: datetime, gap_end: datetime, gap_minutes: int, filled_by: str = None, variance: float = None, reason: str = None):
+    def track_gap(self, gap_start: datetime, gap_end: datetime, gap_minutes: int,
+                  filled_by: str = None, variance: float = None,
+                  reason: str = None):
         """Trackear un gap detectado con información detallada"""
         gap_info = {
             'start': gap_start,
             'end': gap_end,
             'minutes': gap_minutes,
+            'bars_missing': int(gap_minutes / 5),
             'filled_by': filled_by,
             'variance': variance,
             'reason': reason,
@@ -414,6 +424,7 @@ class DataQualityTracker:
             'max_gap_minutes': 0,
             'gap_distribution': {},
             'gaps_by_day': {},
+            'summary': {},
             'gap_classification': {
                 'market_hours': {
                     'total': 0,
@@ -440,8 +451,17 @@ class DataQualityTracker:
         all_gaps = []
         for day_gaps in self.gap_tracking.values():
             all_gaps.extend(day_gaps)
-        
+
         if not all_gaps:
+            gap_analysis['summary'] = {
+                'total_gaps': 0,
+                'gaps_filled': 0,
+                'gap_fill_rate': 0,
+                'large_gap_threshold': self.large_gap_threshold,
+                'retried_large_gaps': 0,
+                'unresolved_large_gaps': 0,
+                'large_gaps': 0
+            }
             return gap_analysis
         
         gap_analysis['total_gaps'] = len(all_gaps)
@@ -480,7 +500,7 @@ class DataQualityTracker:
         gap_analysis['imputation_summary']['imputed'] = len(imputed_gaps)
         gap_analysis['imputation_summary']['not_imputed'] = len(not_imputed_gaps)
         gap_analysis['imputation_summary']['ignored'] = len(outside_market_gaps)
-        
+
         # Razones de no imputación
         reasons = {}
         for gap in all_gaps:
@@ -495,6 +515,21 @@ class DataQualityTracker:
             'medium_15_30': len([g for g in gap_sizes if 15 < g <= 30]),
             'large_30_60': len([g for g in gap_sizes if 30 < g <= 60]),
             'very_large_60+': len([g for g in gap_sizes if g > 60])
+        }
+
+        # Resumen general y métricas de gaps grandes
+        large_gaps = [g for g in all_gaps if g['minutes'] > self.large_gap_threshold]
+        retried = len([g for g in large_gaps if g.get('filled_by') == 'recaptured'])
+        unresolved = len(large_gaps) - retried
+        filled_count = len([g for g in all_gaps if g.get('filled_by')])
+        gap_analysis['summary'] = {
+            'total_gaps': len(all_gaps),
+            'gaps_filled': filled_count,
+            'gap_fill_rate': filled_count / len(all_gaps) * 100 if all_gaps else 0,
+            'large_gap_threshold': self.large_gap_threshold,
+            'retried_large_gaps': retried,
+            'unresolved_large_gaps': unresolved,
+            'large_gaps': len(large_gaps)
         }
         
         # Gaps por día
