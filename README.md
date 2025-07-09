@@ -10,6 +10,7 @@ A comprehensive reinforcement learning framework for algorithmic trading on the 
 - **Granular Traceability**: Detailed data lineage and quality scoring
 - **Market Hours Compliance**: Automatic filtering of non-market hours data
 - **Quality Assurance**: Multi-level validation and reporting systems
+- **Aggregated Quality Report**: Merges capture and validation metrics
 
 ## 📁 Project Structure
 
@@ -214,6 +215,7 @@ core functions fail during execution.
 - Quality analysis reports in `data/validated/`
 - Execution reports with timestamps
 - Gap detection and statistical summaries
+- Final aggregated quality report in `data/validated/final_quality_report.json`
 
 ## 🤝 Contributing
 
