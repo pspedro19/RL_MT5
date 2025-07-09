@@ -90,6 +90,10 @@ class DataQualityTracker:
         self.monthly_trends = {}  # Tendencias mensuales
         self.broker_info = {}  # Información del broker
         self.variance_per_gap = defaultdict(float)  # Varianza estimada por gap
+
+        # Historial de data_origin por timestamp para análisis posterior
+        self.data_origin_history = []
+        self.synthetic_streaks = pd.DataFrame(columns=["start", "end", "length"])
         
     def track_record(self, record: pd.Series):
         """Trackear un registro individual"""
@@ -98,6 +102,9 @@ class DataQualityTracker:
         method = record.get('capture_method', 'unknown')
         quality = record.get('quality_score', 1.0)
         data_origin = record.get('data_origin')
+
+        # Guardar historial para análisis de secuencias sintéticas
+        self.data_origin_history.append((timestamp, data_origin))
         
         # Actualizar origenes si están disponibles
         if data_origin:
@@ -351,7 +358,15 @@ class DataQualityTracker:
             'instrument': self.instrument,
             'market_config': self.market_config
         }
-        
+
+        # Detectar tramos sintéticos y exportar a parquet
+        streaks_df = self.detect_synthetic_streaks()
+        if not streaks_df.empty:
+            try:
+                streaks_df.to_parquet("synthetic_streaks.parquet", index=False)
+            except Exception as e:
+                logger.warning(f"No se pudo guardar synthetic_streaks.parquet: {e}")
+
         return report
     
     def _generate_summary(self) -> Dict:
@@ -762,6 +777,44 @@ class DataQualityTracker:
             'yearly_breakdown': yearly_breakdown,
             'monthly_breakdown': monthly_breakdown
         }
+
+    def detect_synthetic_streaks(self, min_length: int = 3) -> pd.DataFrame:
+        """Detectar tramos consecutivos marcados como imputados.
+
+        Parameters
+        ----------
+        min_length : int
+            Longitud mínima de la secuencia para ser reportada.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame con columnas ['start', 'end', 'length']
+        """
+
+        if not self.data_origin_history:
+            self.synthetic_streaks = pd.DataFrame(columns=["start", "end", "length"])
+            return self.synthetic_streaks
+
+        df = pd.DataFrame(self.data_origin_history, columns=["timestamp", "data_origin"])\
+            .sort_values("timestamp")
+        df["is_imputed"] = df["data_origin"].astype(str).str.contains("IMPUTADO")
+
+        if df.empty:
+            self.synthetic_streaks = pd.DataFrame(columns=["start", "end", "length"])
+            return self.synthetic_streaks
+
+        df["streak_id"] = (df["is_imputed"] != df["is_imputed"].shift()).cumsum()
+        streaks = (
+            df[df["is_imputed"]]
+            .groupby("streak_id")
+            .agg(start=("timestamp", "first"), end=("timestamp", "last"), length=("timestamp", "count"))
+            .reset_index(drop=True)
+        )
+
+        streaks = streaks[streaks["length"] >= min_length]
+        self.synthetic_streaks = streaks
+        return streaks
     
     def generate_completeness_heatmap(self, output_path: str):
         """Generar CSV con datos de completitud en lugar de visualización"""
