@@ -286,6 +286,42 @@ class DataIntegrityValidator:
         """
         results = {}
         all_valid = True
+
+        # Comprobar timezone de la columna 'time'
+        tz_result: Dict[str, any] = {}
+        tz_valid = True
+        try:
+            tzinfo = df['time'].dt.tz
+            if tzinfo is None:
+                df['time'] = df['time'].dt.tz_localize('America/New_York')
+                tz_result.update({'tzinfo_present': False, 'converted': True})
+            else:
+                tz_result['tzinfo_present'] = True
+                if str(tzinfo) != 'America/New_York':
+                    df['time'] = df['time'].dt.tz_convert('America/New_York')
+                    tz_result.update({'converted': True, 'original_timezone': str(tzinfo)})
+                else:
+                    tz_result['converted'] = False
+            tz_result['timezone'] = str(df['time'].dt.tz)
+            tz_valid = tz_result['timezone'] == 'America/New_York'
+        except Exception as e:
+            tz_valid = False
+            tz_result['error'] = str(e)
+        tz_result['validation_passed'] = tz_valid
+        results['timezone_check'] = tz_result
+        all_valid &= tz_valid
+
+        # Verificar columnas duplicadas
+        duplicate_cols = df.columns[df.columns.duplicated()].tolist()
+        dup_result = {
+            'has_duplicates': len(duplicate_cols) > 0,
+            'duplicates': duplicate_cols,
+            'validation_passed': len(duplicate_cols) == 0
+        }
+        if duplicate_cols:
+            logger.warning(f"Columnas duplicadas detectadas: {duplicate_cols}")
+        results['column_duplicates'] = dup_result
+        all_valid &= dup_result['validation_passed']
         
         # OHLCV
         valid, details = self.validate_ohlcv(df)
@@ -308,5 +344,4 @@ class DataIntegrityValidator:
         all_valid &= valid
         
         results['all_validations_passed'] = all_valid
-        
-        return all_valid, results
+                return all_valid, results
