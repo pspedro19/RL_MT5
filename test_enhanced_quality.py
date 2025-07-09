@@ -16,6 +16,16 @@ from data.processing import detect_gaps_optimized, is_within_market_hours
 from data.quality.quality_tracker import DataQualityTracker
 from utils.report_generator import generate_quality_markdown_report, generate_json_report_enhanced
 
+REQUIRED_FILES = [
+    'pipelines/01_capture/data/processing.py',
+    'pipelines/01_capture/data/quality/quality_tracker.py',
+]
+
+for path in REQUIRED_FILES:
+    if not os.path.exists(path):
+        print(f"Faltan archivos requeridos: {path}")
+        sys.exit(1)
+
 def create_test_data():
     """Crear datos de prueba con gaps conocidos"""
     print("Creando datos de prueba...")
@@ -79,9 +89,12 @@ def test_gap_detection():
     print("\n=== Probando detección de gaps ===")
     
     df = create_test_data()
-    
+
     # Detectar gaps
     gaps_df = detect_gaps_optimized(df, 'US500')
+
+    assert isinstance(gaps_df, pd.DataFrame), "detect_gaps_optimized debe devolver un DataFrame"
+    assert not gaps_df.empty, "No se detectaron gaps"
     
     print(f"Gaps detectados: {len(gaps_df)}")
     if not gaps_df.empty:
@@ -138,6 +151,8 @@ def test_quality_tracker():
     )
     
     quality_report = tracker.generate_quality_report()
+    assert 'summary' in quality_report, "El reporte de calidad no tiene seccion summary"
+
     print("Reporte de calidad generado:")
     print(f"- Total de registros: {quality_report['summary']['total_records']}")
     print(f"- Completitud: {quality_report['summary']['overall_completeness']:.2f}%")
@@ -199,11 +214,12 @@ def test_report_generation():
     
     # Generar reporte Markdown
     generate_quality_markdown_report(
-        quality_report, 
+        quality_report,
         'test_quality_report.md',
         metadata
     )
     print("Reporte Markdown generado: test_quality_report.md")
+    assert os.path.exists('test_quality_report.md'), "No se generó test_quality_report.md"
     
     # Generar reporte JSON
     analysis = {'summary': {'total_records': len(df)}}
@@ -214,6 +230,7 @@ def test_report_generation():
         'US500', 'test_quality_report.json', metadata
     )
     print("Reporte JSON generado: test_quality_report.json")
+    assert os.path.exists('test_quality_report.json'), "No se generó test_quality_report.json"
 
 def main():
     """Función principal de prueba"""
@@ -231,11 +248,11 @@ def main():
         print("✅ Quality tracker con clasificación detallada")
         print("✅ Reportes con análisis de procedencia")
         print("✅ Análisis de gaps por horario de mercado")
-        
-    except Exception as e:
+            except Exception as e:
         print(f"\n❌ Error en las pruebas: {e}")
         import traceback
         traceback.print_exc()
+        return 1
 
 if __name__ == "__main__":
-    main() 
+    sys.exit(main())
