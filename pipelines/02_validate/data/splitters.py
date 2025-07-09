@@ -85,7 +85,61 @@ class TemporalSplitter:
         logger.info(f"Split creado: Train={len(train_df):,} ({split_info['train_ratio']:.1%}), "
                    f"Val={len(val_df):,} ({split_info['val_ratio']:.1%})")
         
-        return train_df, val_df, split_info
+
+    def create_fixed_year_splits(self, df: pd.DataFrame, time_col: str = 'time') -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Dict]:
+        """Crear splits fijos por año.
+
+        Train: 2020-2023
+        Val:   2024
+        Test:  2025
+
+        Args:
+            df: DataFrame ordenado por tiempo
+            time_col: Columna de fechas
+
+        Returns:
+            Tuple con DataFrames de train, val y test junto a la información del split
+        """
+
+        logger.info("Creando split fijo por años 2020-2023/2024/2025")
+
+        df_sorted = df.sort_values(time_col).reset_index(drop=True)
+
+        if not pd.api.types.is_datetime64_any_dtype(df_sorted[time_col]):
+            df_sorted[time_col] = pd.to_datetime(df_sorted[time_col])
+
+        train_mask = df_sorted[time_col].dt.year.between(2020, 2023)
+        val_mask = df_sorted[time_col].dt.year == 2024
+        test_mask = df_sorted[time_col].dt.year == 2025
+
+        train_df = df_sorted[train_mask].copy()
+        val_df = df_sorted[val_mask].copy()
+        test_df = df_sorted[test_mask].copy()
+
+        split_info = {
+            'method': 'fixed_years',
+            'train_years': '2020-2023',
+            'val_year': '2024',
+            'test_year': '2025',
+            'train_date_range': {
+                'start': train_df[time_col].min() if not train_df.empty else None,
+                'end': train_df[time_col].max() if not train_df.empty else None,
+            },
+            'val_date_range': {
+                'start': val_df[time_col].min() if not val_df.empty else None,
+                'end': val_df[time_col].max() if not val_df.empty else None,
+            },
+            'test_date_range': {
+                'start': test_df[time_col].min() if not test_df.empty else None,
+                'end': test_df[time_col].max() if not test_df.empty else None,
+            },
+        }
+
+        logger.info(
+            f"Split fijo creado: Train={len(train_df):,}, Val={len(val_df):,}, Test={len(test_df):,}"
+        )
+
+        return train_df, val_df, test_df, split_info
     
     def create_walk_forward_splits(self, df: pd.DataFrame, 
                                  n_splits: int = 5,
@@ -392,5 +446,4 @@ class TemporalSplitter:
         analysis['max_train_size'] = np.max(analysis['train_sizes'])
         analysis['min_val_size'] = np.min(analysis['val_sizes'])
         analysis['max_val_size'] = np.max(analysis['val_sizes'])
-        
-        return analysis
+                return analysis

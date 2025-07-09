@@ -388,28 +388,20 @@ class ValidationPipeline:
         """Normalizar datos (ya se hace en el método principal)"""
         pass  # Ya se ejecuta en el método principal
     
-    def _create_splits(self, df: pd.DataFrame) -> List[Tuple[pd.DataFrame, pd.DataFrame, Dict]]:
-        """Crear splits de entrenamiento/validación"""
-        logger.info("Creando splits de entrenamiento/validación...")
-        
-        splits = []
-        
-        # Split temporal 80/20
-        train_df, val_df = self.splitter.split_temporal(df, train_ratio=0.8)
-        
-        split_info = {
-            'method': 'temporal',
-            'train_ratio': 0.8,
-            'train_size': len(train_df),
-            'val_size': len(val_df),
-            'train_start': str(train_df['time'].min()) if len(train_df) > 0 else None,
-            'train_end': str(train_df['time'].max()) if len(train_df) > 0 else None,
-            'val_start': str(val_df['time'].min()) if len(val_df) > 0 else None,
-            'val_end': str(val_df['time'].max()) if len(val_df) > 0 else None
+    def _create_splits(self, df: pd.DataFrame) -> List[Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Dict]]:
+        """Crear splits de entrenamiento/validación y prueba con rangos fijos"""
+        logger.info("Creando splits fijos por año...")
+
+        train_df, val_df, test_df, split_info = self.splitter.create_fixed_year_splits(df)
+
+        self.validation_results['data_splits'] = {
+            'train_range': split_info['train_date_range'],
+            'val_range': split_info['val_date_range'],
+            'test_range': split_info['test_date_range'],
         }
-        
-        splits.append((train_df, val_df, split_info))
-        
+
+        splits = [(train_df, val_df, test_df, split_info)]
+
         logger.info(f"Splits creados: {len(splits)}")
         return splits
     
@@ -423,12 +415,13 @@ class ValidationPipeline:
         df.to_csv(os.path.join(output_dir, 'validated_dataset.csv'), index=False)
         
         # Guardar splits
-        for i, (train_df, val_df, split_info) in enumerate(splits):
+        for i, (train_df, val_df, test_df, split_info) in enumerate(splits):
             split_dir = os.path.join(output_dir, f'split_{i+1}')
             os.makedirs(split_dir, exist_ok=True)
-            
+
             train_df.to_csv(os.path.join(split_dir, 'train.csv'), index=False)
             val_df.to_csv(os.path.join(split_dir, 'validation.csv'), index=False)
+            test_df.to_csv(os.path.join(split_dir, 'test.csv'), index=False)
             
             # Guardar información del split
             with open(os.path.join(split_dir, 'split_info.json'), 'w') as f:
