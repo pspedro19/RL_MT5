@@ -178,7 +178,13 @@ def validate_pipeline_files():
     return True
 
 def run_command(command, description, timeout=7200):  # Aumentado a 2 horas
-    """Ejecutar comando con mejor manejo de errores y timeout"""
+    """Ejecutar comando con mejor manejo de errores y timeout.
+
+    Returns
+    -------
+    Tuple[bool, str]
+        success flag and captured output (stderr y stdout combinados).
+    """
     safe_print(f"\n{'='*60}")
     safe_print(f"🚀 {description}")
     safe_print(f"{'='*60}")
@@ -186,6 +192,7 @@ def run_command(command, description, timeout=7200):  # Aumentado a 2 horas
     safe_print("-" * 60)
     
     start_time = time.time()
+    captured_output = []
     
     try:
         # Usar subprocess.Popen para mejor control
@@ -200,32 +207,36 @@ def run_command(command, description, timeout=7200):  # Aumentado a 2 horas
             errors='replace'
         )
         
-        # Mostrar output en tiempo real
+        # Mostrar output en tiempo real y capturar
         while True:
             output = process.stdout.readline()
             if output == '' and process.poll() is not None:
                 break
             if output:
-                safe_print(output.strip())
+                line = output.strip()
+                safe_print(line)
+                captured_output.append(line)
         
         # Esperar a que termine
         return_code = process.poll()
         
+        joined_output = "\n".join(captured_output)
+
         if return_code == 0:
             elapsed_time = time.time() - start_time
             safe_print(f"✅ {description} completado exitosamente en {elapsed_time:.1f}s")
-            return True
+            return True, joined_output
         else:
             safe_print(f"❌ {description} falló con código {return_code}")
-            return False
+            return False, joined_output
             
     except subprocess.TimeoutExpired:
         safe_print(f"❌ {description} excedió el tiempo límite ({timeout}s)")
         process.kill()
-        return False
+        return False, ""
     except Exception as e:
         safe_print(f"❌ Error ejecutando {description}: {e}")
-        return False
+        return False, str(e)
 
 def find_latest_data_file(symbol, start_year, end_year):
     """Buscar el archivo de datos más reciente con mejor lógica"""
@@ -391,12 +402,14 @@ def main():
             f"--output data"
         )
         
-        if run_command(pipeline01_cmd, "Pipeline 01 - Captura de datos", args.timeout):
+        success, output = run_command(pipeline01_cmd, "Pipeline 01 - Captura de datos", args.timeout)
+        if success:
             pipeline_results['pipeline_01']['success'] = True
             safe_print("✅ Pipeline 01 completado exitosamente")
         else:
-            pipeline_results['pipeline_01']['error'] = "Pipeline 01 falló"
-            safe_print("❌ Pipeline 01 falló")
+            last_line = output.strip().split('\n')[-1] if output else 'Pipeline 01 falló'
+            pipeline_results['pipeline_01']['error'] = last_line
+            safe_print(f"❌ Pipeline 01 falló: {last_line}")
             # Continuar con Pipeline 02 si hay datos disponibles
     
     # Buscar archivo de datos para Pipeline 02
@@ -424,12 +437,14 @@ def main():
                     f"--config pipelines/02_validate/config.py"
                 )
                 
-                if run_command(pipeline02_cmd, "Pipeline 02 - Validación y procesamiento", args.timeout):
+                success, output = run_command(pipeline02_cmd, "Pipeline 02 - Validación y procesamiento", args.timeout)
+                if success:
                     pipeline_results['pipeline_02']['success'] = True
                     safe_print("✅ Pipeline 02 completado exitosamente")
                 else:
-                    pipeline_results['pipeline_02']['error'] = "Pipeline 02 falló"
-                    safe_print("❌ Pipeline 02 falló")
+                    last_line = output.strip().split('\n')[-1] if output else 'Pipeline 02 falló'
+                    pipeline_results['pipeline_02']['error'] = last_line
+                    safe_print(f"❌ Pipeline 02 falló: {last_line}")
     
     # Resumen final
     execution_end = datetime.now()
