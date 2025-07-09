@@ -444,7 +444,7 @@ class ValidationPipeline:
         """Generar reporte básico"""
         logger.info("Generando reporte básico...")
         
-        report = self.reporter.generate_report(df)
+        report = self.reporter.generate_quality_report(self.validation_results)
         return report
     
     def _generate_advanced_reports(self, df: pd.DataFrame, analysis: Dict, quality_report: Dict, output_dir: str):
