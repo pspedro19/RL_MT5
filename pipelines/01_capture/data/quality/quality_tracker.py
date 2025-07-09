@@ -41,7 +41,12 @@ class DataQualityTracker:
         
         self.source_tracking = defaultdict(lambda: defaultdict(int))
         self.gap_tracking = defaultdict(list)
-        self.daily_completeness = defaultdict(lambda: {'expected': 0, 'captured': 0, 'sources': defaultdict(int)})
+        self.daily_completeness = defaultdict(lambda: {
+            'expected': 0,
+            'captured': 0,
+            'sources': defaultdict(int)
+        })
+        self.daily_coverage_path: Optional[str] = None
         self.hourly_completeness = defaultdict(lambda: defaultdict(lambda: {'expected': 0, 'captured': 0, 'sources': defaultdict(int)}))
         self.timeframe_contributions = defaultdict(lambda: defaultdict(int))
         self.imputation_tracking = defaultdict(list)
@@ -340,6 +345,29 @@ class DataQualityTracker:
         """Actualizar completitud horaria"""
         self.hourly_completeness[year][hour]['captured'] = captured
         self.hourly_completeness[year][hour]['expected'] = expected
+
+    def save_daily_coverage_csv(self, path: str = 'daily_coverage.csv') -> None:
+        """Guardar matriz de cobertura diaria en CSV."""
+        records = []
+        for date, stats in sorted(self.daily_completeness.items()):
+            expected = stats['expected']
+            captured = stats['captured']
+            pct = (captured / expected * 100) if expected > 0 else 0
+            grade = self._grade_completeness(pct)
+            records.append({
+                'date': date.isoformat() if hasattr(date, 'isoformat') else str(date),
+                'expected_bars': expected,
+                'captured_bars': captured,
+                'coverage_pct': pct,
+                'grade': grade
+            })
+
+        if records:
+            df = pd.DataFrame(records)
+            df.to_csv(path, index=False)
+            self.daily_coverage_path = path
+        else:
+            self.daily_coverage_path = None
     
     def generate_quality_report(self) -> Dict[str, Any]:
         """Generar reporte completo de calidad"""
@@ -359,6 +387,15 @@ class DataQualityTracker:
             'market_config': self.market_config
         }
 
+        # Guardar matriz diaria de cobertura
+        try:
+            self.save_daily_coverage_csv()
+        except Exception as e:
+            logger.warning(f"No se pudo guardar daily_coverage.csv: {e}")
+
+        if self.daily_coverage_path:
+            report['daily_coverage_file'] = self.daily_coverage_path
+
         # Detectar tramos sintéticos y exportar a parquet
         streaks_df = self.detect_synthetic_streaks()
         if not streaks_df.empty:
@@ -368,6 +405,17 @@ class DataQualityTracker:
                 logger.warning(f"No se pudo guardar synthetic_streaks.parquet: {e}")
 
         return report
+
+    def _grade_completeness(self, pct: float) -> str:
+        """Clasificar porcentaje de completitud en una letra."""
+        if pct >= 95:
+            return 'A'
+        elif pct >= 90:
+            return 'B'
+        elif pct >= 80:
+            return 'C'
+        else:
+            return 'D'
     
     def _generate_summary(self) -> Dict:
         """Generar resumen general"""
@@ -397,11 +445,14 @@ class DataQualityTracker:
         for date, stats in self.daily_completeness.items():
             if stats['expected'] > 0:
                 completeness = stats['captured'] / stats['expected']
+                pct = completeness * 100
                 daily_stats.append({
                     'date': date,
                     'captured': stats['captured'],
                     'expected': stats['expected'],
                     'completeness': completeness,
+                    'coverage_pct': pct,
+                    'grade': self._grade_completeness(pct),
                     'sources': dict(stats['sources'])
                 })
         
