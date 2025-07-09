@@ -168,6 +168,19 @@ filtered_data, analysis = apply_market_hours_filter(df, 'US500')
 - `plotly>=5.0.0` (for visualization)
 - `scikit-learn>=1.1.0` (for ML features)
 
+## 🧪 Running Tests
+
+After installing the required dependencies, you can run the included test suites
+to verify that the environment is correctly configured:
+
+```bash
+python test_pipeline.py
+python test_enhanced_quality.py
+```
+
+Both scripts exit with a non-zero status if mandatory files are missing or any
+core functions fail during execution.
+
 ## 🔍 Monitoring and Logging
 
 ### Log Files
