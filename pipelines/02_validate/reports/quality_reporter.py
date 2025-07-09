@@ -52,7 +52,11 @@ class QualityReporter:
             'checklist': self._generate_checklist(validation_results)
         }
         
-        logger.info(f"Reporte generado. Score de calidad: {report['quality_score']['overall_score']:.1f}/100")
+        score = report['quality_score']['overall_score']
+        grade = report['quality_score']['grade']
+        logger.info(
+            f"Reporte generado. Score de calidad: {score:.1f}/100 ({grade})"
+        )
         
         return report
     
@@ -146,30 +150,52 @@ class QualityReporter:
         """
         scores = {}
         weights = {
-            'data_completeness': 0.25,
-            'temporal_consistency': 0.25,
-            'data_integrity': 0.25,
-            'market_compliance': 0.25
+            'completeness': 0.5,
+            'integrity': 0.3,
+            'consistency': 0.2,
         }
-        
-        # Data completeness
-        nan_percentage = results.get('cleaning_summary', {}).get('quality_metrics', {}).get('nan_percentage', 0)
-        scores['data_completeness'] = max(0, 100 - nan_percentage * 10)
-        
-        # Temporal consistency
-        m5_consistency = results.get('temporal', {}).get('m5_consistency', {}).get('consistency_percentage', 0)
-        scores['temporal_consistency'] = m5_consistency
-        
-        # Data integrity
-        real_data_pct = results.get('data_integrity', {}).get('data_flags', {}).get('real_percentage', 0)
-        scores['data_integrity'] = real_data_pct
-        
-        # Market compliance
-        market_hours_pct = results.get('market_hours', {}).get('market_hours', {}).get('market_hours_percentage', 0)
-        scores['market_compliance'] = market_hours_pct
-        
+
+        # Completeness
+        completeness = (
+            results.get('quality_report', {})
+            .get('summary', {})
+            .get(
+                'overall_completeness',
+                results.get('quality_checklist', {})
+                .get('temporal_coverage', {})
+                .get('trading_days_coverage', 0) * 100,
+            )
+        )
+        scores['completeness'] = completeness
+
+        # Integrity
+        integrity_results = results.get('integrity_validations', {})
+        passed = 0
+        total = 0
+        for val in integrity_results.values():
+            if isinstance(val, dict) and 'validation_passed' in val:
+                total += 1
+                if val.get('validation_passed'):
+                    passed += 1
+        integrity = (passed / total * 100) if total > 0 else 0
+        scores['integrity'] = integrity
+
+        # Consistency
+        temporal_results = results.get('temporal_validations', {})
+        consistency = temporal_results.get('m5_consistency', {}).get('consistency_percentage')
+        if consistency is None:
+            t_passed = 0
+            t_total = 0
+            for val in temporal_results.values():
+                if isinstance(val, dict) and 'validation_passed' in val:
+                    t_total += 1
+                    if val.get('validation_passed'):
+                        t_passed += 1
+            consistency = (t_passed / t_total * 100) if t_total > 0 else 0
+        scores['consistency'] = consistency
+
         # Overall score
-        overall_score = sum(scores[k] * weights[k] for k in scores)
+        overall_score = sum(scores[k] * weights[k] for k in weights)
         
         return {
             'overall_score': overall_score,
