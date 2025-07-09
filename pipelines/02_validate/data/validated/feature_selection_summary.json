@@ -1,0 +1,36 @@
+{
+  "selected_features": [],
+  "total_selected": 0,
+  "selection_info": {},
+  "feature_importances": {},
+  "recommended_features": [
+    "open",
+    "high",
+    "low",
+    "close",
+    "log_return",
+    "ema_21",
+    "ema_55",
+    "sma_200",
+    "atr_14",
+    "volatility_20",
+    "rsi_14",
+    "macd_histogram",
+    "hour_sin",
+    "hour_cos",
+    "dow_sin",
+    "dow_cos",
+    "vwap",
+    "volume_ratio",
+    "doji",
+    "bullish_engulfing",
+    "bearish_engulfing",
+    "minutes_since_open",
+    "minutes_to_close",
+    "session_progress"
+  ],
+  "mandatory_features": [
+    "time",
+    "data_flag"
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "metadata": {
+    "timestamp": "2025-07-08T19:02:31.196179",
+    "pipeline_version": "2.0_ENHANCED_QUALITY",
+    "symbol": "US500",
+    "system_info": {
+      "hostname": "LAPTOP-TS3U3G61",
+      "platform": "Windows-11-10.0.26100-SP0",
+      "processor": "Intel64 Family 6 Model 154 Stepping 3, GenuineIntel",
+      "python_version": "3.12.10",
+      "cpu_count": 16,
+      "memory_gb": 15.675773620605469,
+      "os_version": "10.0.26100",
+      "architecture": "AMD64"
+    },
+    "git_info": {
+      "commit": "unknown",
+      "branch": "unknown",
+      "tag": "unknown",
+      "dirty": false,
+      "remote": "unknown"
+    },
+    "broker_info": {},
+    "file_checksums": {}
+  },
+  "capture_statistics": {},
+  "data_analysis": {
+    "summary": {
+      "total_records": 271658,
+      "date_range": {
+        "start": "2020-02-28T01:00:00+00:00",
+        "end": "2025-07-08T23:50:00+00:00"
+      },
+      "trading_days": 1384
+    },
+    "yearly_analysis": {
+      

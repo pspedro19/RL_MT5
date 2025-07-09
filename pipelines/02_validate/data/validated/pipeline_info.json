@@ -1,0 +1,19 @@
+{
+  "dataset_info": {
+    "total_records": 271616,
+    "total_features": 111,
+    "date_range": {
+      "start": "2020-02-28 01:00:00",
+      "end": "2025-07-08 20:20:00"
+    }
+  },
+  "market_validations": {
+    "market_hours": {
+      "is_valid": false,
+      "total_records": 271616,
+      "valid_market_records": 78557,
+      "market_percentage": 28.922081173421297,
+      "weekend_records": 0,
+      "outside_market_records": 193059,
+      "weekend_records_data": null,
+      "outside_market_data": 
