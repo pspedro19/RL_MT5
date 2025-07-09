@@ -604,15 +604,30 @@ class DataQualityTracker:
     def _analyze_imputations(self) -> Dict:
         """Analizar imputaciones realizadas"""
         total_imputations = sum(len(imputations) for imputations in self.imputation_tracking.values())
-        
+
         method_counts = defaultdict(int)
         for date_imputations in self.imputation_tracking.values():
             for imp in date_imputations:
                 method_counts[imp['method']] += 1
-        
+
+        # Calcular originalidad global y fechas con alta imputaci\u00f3n
+        total_records = sum(t['total_records'] for t in self.yearly_tracking.values())
+        originality = (total_records - total_imputations) / total_records * 100 if total_records > 0 else 0
+
+        daily_rates = {}
+        threshold = 0.02
+        for date, imputations in self.imputation_tracking.items():
+            expected = self.daily_completeness.get(date, {}).get('expected', 0)
+            rate = len(imputations) / expected if expected > 0 else 0
+            if rate > threshold:
+                daily_rates[str(date)] = rate
+
         return {
             'total_imputations': total_imputations,
-            'method_counts': dict(method_counts)
+            'method_counts': dict(method_counts),
+            'dataset_originality': originality,
+            'dates_over_threshold': daily_rates,
+            'threshold': threshold
         }
     
     def _analyze_quality_scores(self) -> Dict:
