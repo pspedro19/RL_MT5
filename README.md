@@ -190,7 +190,7 @@ filtered_data, analysis = apply_market_hours_filter(df, 'US500')
 
 ## 📝 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ## 🆘 Support
 
@@ -206,5 +206,4 @@ For support and questions:
 - **v1.0**: Initial data capture pipeline
 
 ---
-
-**Note**: This project is designed for educational and research purposes. Always test thoroughly before using in live trading environments. 
+**Note**: This project is designed for educational and research purposes. Always test thoroughly before using in live trading environments. 
