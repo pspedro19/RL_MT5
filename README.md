@@ -63,6 +63,15 @@ RL_SP500/
    - Update MT5 credentials in `pipelines/01_capture/config/settings.py`
    - Ensure MT5 terminal is running
 
+4. **Obtain datasets**
+   - Large CSV and Parquet files are stored via [Git LFS](https://git-lfs.com/).
+   - Download them with `git lfs pull` or reproduce them using the capture pipeline:
+
+   ```bash
+   cd pipelines/01_capture
+   python main.py --instrument US500 --start_date 2020-01-01 --end_date 2025-01-01
+   ```
+
 ## 🚀 Quick Start
 
 ### 1. Data Capture
